@@ -9364,7 +9364,7 @@ position."
 (declare-function edit-indirect--run-hook-with-positions "edit-indirect")
 
 (defun markdown--edit-indirect-commit ()
-  "Commit using `replace-buffer-contents' for minimal undo.
+  "Commit using `replace-region-contents' for minimal undo.
 This replaces the original `edit-indirect--commit' to avoid
 replacing the entire region, which creates a huge undo entry."
   (run-hooks 'edit-indirect-before-commit-hook)
@@ -9378,14 +9378,12 @@ replacing the entire region, which creates a huge undo entry."
               (end-marker (copy-marker end)))
           (edit-indirect--run-hook-with-positions
            'edit-indirect-before-commit-functions beg-marker end-marker)
-          ;; Use replace-buffer-contents for minimal diff instead of replace-match
+          ;; Use replace-region-contents for minimal diff instead of replace-match
           (let ((old-content (buffer-substring beg end))
                 (new-content (with-current-buffer edit-buffer
                                (buffer-substring-no-properties (point-min) (point-max)))))
             (unless (string= new-content old-content)
-              (save-restriction
-                (narrow-to-region beg end)
-                (replace-buffer-contents edit-buffer))))
+              (replace-region-contents beg end edit-buffer)))
           (edit-indirect--run-hook-with-positions
            'edit-indirect-after-commit-functions beg-marker end-marker)
           (set-marker beg-marker nil)
