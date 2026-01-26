@@ -2923,27 +2923,40 @@ This may be useful for tables and Pandoc's line_blocks extension."
   "Return t if PROP from BEGIN to END is equal to one of the given PROP-VALUES.
 Also returns t if PROP is a list containing one of the PROP-VALUES.
 Return nil otherwise."
-  (let (props)
+  (let ((pos begin)
+        props)
     (catch 'found
-      (dolist (loc (number-sequence begin end))
-        (when (setq props (get-text-property loc prop))
+      (while (<= pos end)
+        (setq props (get-text-property pos prop))
+        (when props
           (cond ((listp props)
                  ;; props is a list, check for membership
                  (dolist (val prop-values)
-                   (when (memq val props) (throw 'found loc))))
+                   (when (memq val props) (throw 'found pos))))
                 (t
                  ;; props is a scalar, check for equality
                  (dolist (val prop-values)
-                   (when (eq val props) (throw 'found loc))))))))))
+                   (when (eq val props) (throw 'found pos))))))
+        ;; Jump to next property change instead of iterating every char
+        (setq pos (or (next-single-property-change pos prop nil (1+ end)) (1+ end)))))))
 
 (defun markdown-range-properties-exist (begin end props)
-  (cl-loop
-   for loc in (number-sequence begin end)
-   with result = nil
-   while (not
-          (setq result
-                (cl-some (lambda (prop) (get-text-property loc prop)) props)))
-   finally return result))
+  "Return non-nil if any property in PROPS exists between BEGIN and END.
+Uses property-change functions to efficiently skip regions without properties."
+  (let ((pos begin)
+        result)
+    (catch 'found
+      (while (<= pos end)
+        (when (setq result
+                    (cl-some (lambda (prop) (get-text-property pos prop)) props))
+          (throw 'found result))
+        ;; Find the next position where any property might change
+        (let ((next-pos (1+ end)))
+          (dolist (prop props)
+            (let ((change-pos (next-single-property-change pos prop nil (1+ end))))
+              (when (and change-pos (< change-pos next-pos))
+                (setq next-pos change-pos))))
+          (setq pos next-pos))))))
 
 (defun markdown-match-inline-generic (regex last &optional faceless)
   "Match inline REGEX from the point to LAST.
@@ -2953,18 +2966,13 @@ When FACELESS is non-nil, do not return matches where faces have been applied."
           (face (and faceless (text-property-not-all
                                (match-beginning 0) (match-end 0) 'face nil))))
       (cond
-       ;; In code block: move past it and recursively search again
        (bounds
         (when (< (goto-char (cl-second bounds)) last)
           (markdown-match-inline-generic regex last faceless)))
-       ;; When faces are found in the match range, skip over the match and
-       ;; recursively search again.
        (face
         (when (< (goto-char (match-end 0)) last)
           (markdown-match-inline-generic regex last faceless)))
-       ;; Keep match data and return t when in bounds.
-       (t
-        (<= (match-end 0) last))))))
+       (t (<= (match-end 0) last))))))
 
 (defun markdown-match-code (last)
   "Match inline code fragments from point to LAST."
