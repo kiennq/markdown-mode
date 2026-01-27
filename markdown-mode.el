@@ -8291,7 +8291,7 @@ it exists."
 (defun markdown-copy-partial-heading-link-at-point-as-kill ()
   "Copy internal heading link at point to the `kill-ring'."
   (interactive)
-  (if-let ((url (markdown--partial-heading-url-at-point)))
+  (if-let* ((url (markdown--partial-heading-url-at-point)))
       (progn
         (message "Copied: %s" url)
         (kill-new url))))
@@ -8299,7 +8299,7 @@ it exists."
 (defun markdown-copy-full-heading-link-at-point-as-kill ()
   "Copy the full url to heading at point to the `kill-ring'."
   (interactive)
-  (if-let ((url (markdown--full-heading-url-at-point)))
+  (if-let* ((url (markdown--full-heading-url-at-point)))
       (progn
         (message "Copied: %s" url)
         (kill-new url))))
@@ -9453,53 +9453,44 @@ position."
 
 (require 'edit-indirect nil t)
 (defvar edit-indirect-guess-mode-function)
-(defvar edit-indirect-after-commit-functions)
 (defvar edit-indirect--overlay)
-(declare-function edit-indirect-commit "edit-indirect")
-(declare-function edit-indirect--commit "edit-indirect")
 
-(defvar-local markdown--edit-indirect-committed-position nil)
+(defvar markdown--edit-indirect-saved-pos nil
+  "Saved cursor position before edit-indirect commit.")
 
-(defun markdown--edit-indirect-save-committed-position ()
-  "Save where editing is committed in a local variable in the parent buffer."
-  (if-let* ((parent-buffer (overlay-buffer edit-indirect--overlay))
-            ((with-current-buffer parent-buffer
-               (derived-mode-p 'markdown-mode)))
-            (pos (cons (line-number-at-pos) (current-column))))
-    (with-current-buffer parent-buffer
-      (setq markdown--edit-indirect-committed-position pos))))
+(defun markdown--edit-indirect-save-pos (&rest _)
+  "Save cursor position before commit for later restoration."
+  (when (and (boundp 'edit-indirect--overlay)
+             edit-indirect--overlay
+             (overlay-buffer edit-indirect--overlay))
+    (let ((parent-buffer (overlay-buffer edit-indirect--overlay)))
+      (when (with-current-buffer parent-buffer
+              (derived-mode-p 'markdown-mode))
+        (setq markdown--edit-indirect-saved-pos
+              (list (1- (line-number-at-pos))  ; 0-based line
+                    (current-column)
+                    parent-buffer
+                    (overlay-start edit-indirect--overlay)))))))
+
+(defun markdown--edit-indirect-restore-pos (&rest _)
+  "Restore cursor position in parent buffer after commit."
+  (when markdown--edit-indirect-saved-pos
+    (let ((saved-line (nth 0 markdown--edit-indirect-saved-pos))
+          (saved-col (nth 1 markdown--edit-indirect-saved-pos))
+          (parent-buffer (nth 2 markdown--edit-indirect-saved-pos))
+          (overlay-start (nth 3 markdown--edit-indirect-saved-pos)))
+      (setq markdown--edit-indirect-saved-pos nil)
+      (when (buffer-live-p parent-buffer)
+        (let ((win (get-buffer-window parent-buffer)))
+          (when win (select-window win)))
+        (with-current-buffer parent-buffer
+          (goto-char (or overlay-start (point-min)))
+          (forward-line saved-line)
+          (move-to-column saved-col))))))
 
 (with-eval-after-load 'edit-indirect
-  (advice-add #'edit-indirect--commit :after #'markdown--edit-indirect-save-committed-position))
-
-(defun markdown--edit-indirect-move-to-committed-position ()
-  "Move the point in the code block corresponding to the saved committed position."
-  (when-let* ((pos markdown--edit-indirect-committed-position)
-              (bounds (markdown-get-enclosing-fenced-block-construct))
-              (fence-begin (nth 0 bounds)))
-    (goto-char fence-begin)
-    (let ((block-indentation (current-indentation)))
-      (forward-line (car pos))
-      (move-to-column (+ block-indentation (cdr pos)))))
-  (setq markdown--edit-indirect-committed-position nil))
-
-(with-eval-after-load 'edit-indirect
-  (advice-add #'edit-indirect-commit :after #'markdown--edit-indirect-move-to-committed-position))
-
-(defun markdown--edit-indirect-after-commit-function (beg end)
-  "Corrective logic run on code block content from lines BEG to END.
-Restores code block indentation from BEG to END, and ensures trailing newlines
-at the END of code blocks."
-  ;; ensure trailing newlines
-  (goto-char end)
-  (unless (eq (char-before) ?\n)
-    (insert "\n"))
-  ;; restore code block indentation
-  (goto-char (- beg 1))
-  (let ((block-indentation (current-indentation)))
-    (when (> block-indentation 0)
-      (indent-rigidly beg end block-indentation)))
-  (font-lock-ensure))
+  (advice-add #'edit-indirect-commit :before #'markdown--edit-indirect-save-pos)
+  (advice-add #'edit-indirect-commit :after #'markdown--edit-indirect-restore-pos))
 
 (defun markdown-edit-code-block ()
   "Edit Markdown code block in an indirect buffer."
@@ -9513,8 +9504,6 @@ at the END of code blocks."
                    (original-column (current-column))
                    (begin (progn (goto-char fence-begin) (line-beginning-position 2)))
                    (line (max 0 (- original-line (line-number-at-pos) 1)))
-                   (indentation (current-indentation))
-                   (column (max 0 (- original-column indentation)))
                    (end (progn (goto-char fence-end) (line-beginning-position 1)))
                    (lang (markdown-code-block-lang))
                    (mode (or (and lang (markdown-get-lang-mode lang))
@@ -9523,6 +9512,10 @@ at the END of code blocks."
                     (lambda (_parent-buffer _beg _end)
                       (funcall mode)))
                    (indirect-buf (edit-indirect-region begin end 'display-buffer)))
+              ;; Select the window showing the indirect buffer to ensure cursor position is set
+              (let ((win (get-buffer-window indirect-buf)))
+                (when win
+                  (select-window win)))
               (with-current-buffer indirect-buf
                 ;; reset `sh-shell' when indirect buffer
                 (when (and (not (member system-type '(ms-dos windows-nt)))
@@ -9532,16 +9525,12 @@ at the END of code blocks."
                                                  sh-ancestor-alist)
                                          '("csh" "rc" "sh"))))
                   (sh-set-shell lang))
-                (when (> indentation 0) ;; un-indent in edit-indirect buffer
-                  (indent-rigidly (point-min) (point-max) (- indentation)))
+                ;; Position cursor at same relative location
                 (goto-char (point-min))
                 (forward-line line)
-                (move-to-column column)))
+                (move-to-column original-column)))
           (user-error "Not inside a GFM or tilde fenced code block"))
-      (when (y-or-n-p "Package edit-indirect needed to edit code blocks. Install it now? ")
-        (package-refresh-contents)
-        (package-install 'edit-indirect)
-        (markdown-edit-code-block)))))
+      (user-error "Package `edit-indirect' is required to edit code blocks"))))
 
 
 ;;; Table Editing =============================================================
@@ -10623,10 +10612,7 @@ rows and columns and the column alignment."
     (add-hook 'after-change-functions #'markdown-gfm-checkbox-after-change-function t t)
     (add-hook 'change-major-mode-hook #'markdown-remove-gfm-checkbox-overlays t t))
 
-  ;; edit-indirect
-  (add-hook 'edit-indirect-after-commit-functions
-            #'markdown--edit-indirect-after-commit-function
-            nil 'local)
+  ;; edit-indirect - no after-commit hook needed, handled by before-commit
 
   ;; Marginalized headings
   (when markdown-marginalize-headers
