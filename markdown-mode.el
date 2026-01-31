@@ -9342,21 +9342,41 @@ mode to use is `tuareg-mode'."
            (symbol "Major mode")))
   :package-version '(markdown-mode . "2.3"))
 
+(defun markdown--get-mode-from-ext (ext)
+  "Return major mode for file extension EXT using `auto-mode-alist'."
+  (let ((filename (concat "file." ext)))
+    (cl-loop for (regex . mode) in auto-mode-alist
+             when (and (stringp regex)
+                       (string-match-p regex filename)
+                       (symbolp mode)
+                       (fboundp mode))
+             return mode)))
+
 (defun markdown-get-lang-mode (lang)
   "Return major mode that should be used for LANG.
-LANG is a string, and the returned major mode is a symbol."
-  (cl-find-if
-   #'markdown--lang-mode-predicate
-   (nconc (list (cdr (assoc lang markdown-code-lang-modes))
-                (cdr (assoc (downcase lang) markdown-code-lang-modes)))
-          (and (fboundp 'treesit-language-available-p)
-               (list (and (treesit-language-available-p (intern lang))
-                          (intern (concat lang "-ts-mode")))
-                     (and (treesit-language-available-p (intern (downcase lang)))
-                          (intern (concat (downcase lang) "-ts-mode")))))
-          (list
-           (intern (concat lang "-mode"))
-           (intern (concat (downcase lang) "-mode"))))))
+LANG is a string, and the returned major mode is a symbol.
+Supports:
+- Language names mapped via `markdown-code-lang-modes' (e.g., \"elisp\")
+- Direct major mode names (e.g., \"python-mode\", \"rust-ts-mode\")
+- Language names with conventional mode naming (e.g., \"python\" -> `python-mode')
+- Tree-sitter modes when available (e.g., \"rust\" -> `rust-ts-mode')
+- File extensions via `auto-mode-alist' (e.g., \"py\", \"rs\", \"el\")"
+  (let* ((lang-down (downcase lang)))
+    (cl-find-if
+     #'markdown--lang-mode-predicate
+     (nconc
+      ;; 1. Check markdown-code-lang-modes alist first
+      (list (cdr (assoc lang markdown-code-lang-modes))
+            (cdr (assoc lang-down markdown-code-lang-modes)))
+      ;; 2. Try lang-mode, and lang-ts-mode
+      (list (intern (concat lang "-mode"))
+            (intern (concat lang-down "-mode")))
+      (and (fboundp 'treesit-language-available-p)
+           (treesit-language-available-p (intern lang-down))
+           (list (intern (concat lang-down "-ts-mode"))))
+      ;; 3. Try file extension lookup via auto-mode-alist
+      (list (markdown--get-mode-from-ext lang)
+            (markdown--get-mode-from-ext lang-down))))))
 
 (defun markdown--lang-mode-predicate (mode)
   (and mode
