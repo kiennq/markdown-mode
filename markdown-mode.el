@@ -9397,14 +9397,34 @@ mode to use is `tuareg-mode'."
            (symbol "Major mode")))
   :package-version '(markdown-mode . "2.3"))
 
+(defun markdown--get-mode-from-ext (ext)
+  "Return major mode for file extension EXT using `auto-mode-alist'."
+  (let ((filename (concat "file." ext)))
+    (cl-loop for (regex . mode) in auto-mode-alist
+             when (and (stringp regex)
+                       (string-match-p regex filename)
+                       (symbolp mode)
+                       (fboundp mode))
+             return mode)))
+
 (defun markdown-get-lang-mode (lang)
   "Return major mode that should be used for LANG.
-LANG is a string, and the returned major mode is a symbol."
+LANG is a string, and the returned major mode is a symbol.
+Candidates are tried in order:
+- Language names mapped via `markdown-code-lang-modes' (e.g., \"elisp\")
+- Direct major mode names (e.g., \"python-mode\", \"rust-ts-mode\")
+- Configured tree-sitter modes when available (e.g., \"rust\" ->
+  `rust-ts-mode')
+- Conventional mode naming (e.g., \"python\" -> `python-mode')
+- File extensions via `auto-mode-alist' (e.g., \"py\", \"rs\", \"el\")"
   (let ((down (downcase lang)))
     (or
      (cl-find-if #'markdown--lang-mode-predicate
                  (list (cdr (assoc lang markdown-code-lang-modes))
                        (cdr (assoc down markdown-code-lang-modes))))
+     (and (string-suffix-p "-mode" down)
+          (cl-find-if #'markdown--lang-mode-predicate
+                      (list (intern lang) (intern down))))
      ;; Only probe grammars when an eligible tree-sitter mode could win.
      ;; Avoid caching so newly installed grammars and mode mappings take
      ;; effect immediately.
@@ -9417,7 +9437,10 @@ LANG is a string, and the returned major mode is a symbol."
                    return mode))
      (cl-find-if #'markdown--lang-mode-predicate
                  (list (intern (concat lang "-mode"))
-                       (intern (concat down "-mode")))))))
+                       (intern (concat down "-mode"))))
+     (cl-find-if #'markdown--lang-mode-predicate
+                 (list (markdown--get-mode-from-ext lang)
+                       (markdown--get-mode-from-ext down))))))
 
 (defun markdown--lang-mode-predicate (mode)
   (and mode
