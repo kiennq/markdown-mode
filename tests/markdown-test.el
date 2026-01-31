@@ -4484,6 +4484,20 @@ Details: https://github.com/jrblevin/markdown-mode/issues/787"
     (let ((major-mode-remap-alist '((python-mode . python-ts-mode))))
       (should (eq (markdown-get-lang-mode "python") 'python-ts-mode)))))
 
+(ert-deftest test-markdown-parsing/get-lang-mode-direct-mode-name ()
+  "Test `markdown-get-lang-mode' with direct major mode names."
+  ;; Test with a mode name ending in -mode
+  (should (eq (markdown-get-lang-mode "emacs-lisp-mode") 'emacs-lisp-mode))
+  (should (eq (markdown-get-lang-mode "c-mode") 'c-mode)))
+
+(ert-deftest test-markdown-parsing/get-lang-mode-file-extension ()
+  "Test `markdown-get-lang-mode' with file extensions via `auto-mode-alist'."
+  ;; Test common file extensions
+  (should (eq (markdown-get-lang-mode "el") 'emacs-lisp-mode))
+  (should (memq (markdown-get-lang-mode "py") '(python-mode python-ts-mode)))
+  (should (memq (markdown-get-lang-mode "c") '(c-mode c-ts-mode)))
+  (should (memq (markdown-get-lang-mode "js") '(javascript-mode js-mode js-ts-mode))))
+
 (ert-deftest test-markdown-parsing/code-block-lang-period ()
   "Test `markdown-code-block-lang' when language name begins with a period."
   (markdown-test-string "~~~ { .ruby }
