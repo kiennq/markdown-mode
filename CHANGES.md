@@ -19,6 +19,7 @@
     - Catch an exception when `scan-sexp` fails [GH-917][]
     - `markdown-link-at-pos` should decode both control characters and spaces [GH-921][]
     - `markdown-table-align` now aligns centered cells
+    - Fix highlightings of inline code or bold in strike-through  [GH-926][]
 
 *   Improvements:
     - Support drag and drop features on Windows and multiple files' drag and drop
@@ -37,6 +38,7 @@
   [gh-912]: https://github.com/jrblevin/markdown-mode/issues/912
   [gh-917]: https://github.com/jrblevin/markdown-mode/issues/917
   [gh-921]: https://github.com/jrblevin/markdown-mode/issues/921
+  [gh-926]: https://github.com/jrblevin/markdown-mode/issues/926
 
 # Markdown Mode 2.7
 
