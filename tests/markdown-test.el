@@ -6958,6 +6958,14 @@ Details: https://github.com/jrblevin/markdown-mode/issues/534"
     (markdown-test-range-has-face 10 11 'markdown-markup-face)
     (markdown-test-range-has-face 12 17 nil)))
 
+(ert-deftest test-markdown-gfm/strike-through-with-inline-code ()
+  "Test strike-throughts with inline code.
+Details: https://github.com/jrblevin/markdown-mode/issues/926"
+  (markdown-test-string-gfm "~~nested `code` in strike-through~~"
+    (markdown-test-range-has-face 1 2 'markdown-markup-face)
+    (markdown-test-range-has-face 3 33 'markdown-strike-through-face)
+    (markdown-test-range-has-face 11 14 'markdown-inline-code-face)))
+
 (ert-deftest test-markdown-gfm/insert-strike-through ()
   "Test `markdown-insert-strike-through'."
   (markdown-test-string-gfm "one two three"
