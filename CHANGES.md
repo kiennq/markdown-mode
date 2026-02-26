@@ -9,6 +9,7 @@
 *   New Features:
     - Introduce `markdown-yank-dnd-method` what action to perform on the dropped files
       like `org-mode`.
+    - Add `.mdx` to `auto-mode-alist` [GH-930][]
 
 *   Bug fixes:
     - `markdown-export` should not output stderr content to output file
@@ -39,6 +40,7 @@
   [gh-917]: https://github.com/jrblevin/markdown-mode/issues/917
   [gh-921]: https://github.com/jrblevin/markdown-mode/issues/921
   [gh-926]: https://github.com/jrblevin/markdown-mode/issues/926
+  [gh-930]: https://github.com/jrblevin/markdown-mode/issues/930
 
 # Markdown Mode 2.7
 
