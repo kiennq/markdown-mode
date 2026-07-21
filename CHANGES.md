@@ -10,6 +10,8 @@
     - `markdown-table-align` now handles fullwidth characters correctly [gh-937][]
 
 *   Improvements:
+    - Tables aligned in the source stay visually aligned when markup
+      hiding or URL hiding narrows the displayed cell contents
     - `markdown-preview` displays the buffer name as the page title
     - skip export tests if export command is not installed
     - reduce memory allocations in property checking functions
