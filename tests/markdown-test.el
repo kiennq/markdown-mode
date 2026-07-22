@@ -2307,6 +2307,48 @@ See GH-245."
       (should (invisible-p 174))
       (should (invisible-p 176)))))
 
+(ert-deftest test-markdown-markup-hiding/table-alignment ()
+  "Test that separators of source-aligned tables stay visually aligned.
+Hidden markup narrows displayed cell contents, so the whitespace
+before each cell separator should stretch to the separator's
+buffer column."
+  (let ((markdown-hide-markup t))
+    (markdown-test-string
+        "| **bold** | b |\n|----------|---|\n| plain    | d |\n"
+      ;; First row, spaces before separators at columns 11 and 15
+      (should (equal (get-text-property 11 'display) '(space :align-to 11)))
+      (should (equal (get-text-property 15 'display) '(space :align-to 15)))
+      ;; Delimiter row has no whitespace, so no display specs
+      (should-not (get-text-property 24 'display))
+      ;; Last row stretches to the same columns as the first row
+      (should (equal (get-text-property 42 'display) '(space :align-to 11)))
+      (should (equal (get-text-property 45 'display) '(space :align-to 11)))
+      (should (equal (get-text-property 49 'display) '(space :align-to 15)))))
+  ;; Without markup hiding, no display specs are added
+  (markdown-test-string
+      "| **bold** | b |\n|----------|---|\n| plain    | d |\n"
+    (should-not (get-text-property 11 'display))
+    (should-not (get-text-property 42 'display))))
+
+(ert-deftest test-markdown-markup-hiding/table-alignment-hidden-urls ()
+  "Test visual table alignment when only URL hiding is enabled."
+  (let ((markdown-hide-urls t))
+    (markdown-test-string
+        "| [a](http://example.com/) | b |\n"
+      (should (equal (get-text-property 27 'display) '(space :align-to 27)))
+      (should (equal (get-text-property 31 'display) '(space :align-to 31))))))
+
+(ert-deftest test-markdown-markup-hiding/table-alignment-inline-code ()
+  "Test that pipes inside inline code are not treated as separators."
+  (let ((markdown-hide-markup t))
+    (markdown-test-string
+        "| `a | b` | c |\n|----------|---|\n"
+      ;; Pipe inside the code span, no display spec on the space before it
+      (should-not (get-text-property 5 'display))
+      ;; Real separators still get aligned
+      (should (equal (get-text-property 10 'display) '(space :align-to 10)))
+      (should (equal (get-text-property 14 'display) '(space :align-to 14))))))
+
 (ert-deftest test-markdown-markup-hiding/escape ()
   "Test hiding markup for backslash escapes."
   (markdown-test-string "\\#"
